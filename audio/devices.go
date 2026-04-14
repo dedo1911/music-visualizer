@@ -7,7 +7,7 @@ import (
 )
 
 func ListDevices() error {
-	ctx, err := malgo.InitContext(pulseBackends, malgo.ContextConfig{}, nil)
+	ctx, err := malgo.InitContext(preferredBackends, malgo.ContextConfig{}, nil)
 	if err != nil {
 		return fmt.Errorf("init context: %w", err)
 	}

@@ -15,8 +15,8 @@ const (
 	KeyFFTSize  = 262144 // buffer lungo per key detection (~5.9s, risoluzione ~0.17Hz)
 )
 
-// pulseBackends forces PulseAudio (PipeWire-compatible) over raw ALSA.
-var pulseBackends = []malgo.Backend{malgo.BackendPulseaudio}
+// preferredBackends is set per-platform via build tags.
+// See backend_linux.go, backend_darwin.go, backend_windows.go.
 
 type Capture struct {
 	mu         sync.RWMutex
@@ -31,9 +31,9 @@ type Capture struct {
 //
 //	>=0 = index from the list returned by ListDevices()
 func NewCapture(deviceIndex int) (*Capture, error) {
-	ctx, err := malgo.InitContext(pulseBackends, malgo.ContextConfig{}, nil)
+	ctx, err := malgo.InitContext(preferredBackends, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("init pulseaudio context: %w", err)
+		return nil, fmt.Errorf("init audio context: %w", err)
 	}
 
 	c := &Capture{
