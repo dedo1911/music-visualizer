@@ -8,16 +8,16 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-// ray è un singolo raggio che parte dal centro e va verso il bordo.
+// ray is a single ray that starts from the center and goes toward the edge.
 type ray struct {
-	angle float64 // direzione in radianti
+	angle float64 // direction in radians
 	life  float64 // 0..1
 	hue   float64
-	len   float64 // lunghezza relativa allo schermo (0..1)
+	len   float64 // length relative to screen (0..1)
 	width float32
 }
 
-// Sparkles genera raggi starburst sugli hi-hat.
+// Sparkles generates starburst rays on hi-hats.
 type Sparkles struct {
 	pool []ray
 }
@@ -57,7 +57,7 @@ func (s *Sparkles) draw(dst *ebiten.Image, cx, cy float64, screenH int) {
 	maxR := float64(screenH) * 0.55
 
 	for _, r := range s.pool {
-		// Il raggio parte dal 15% del raggio massimo e arriva fino a r.len
+		// The ray starts from 15% of max radius and extends to r.len
 		r0 := maxR * 0.15
 		r1 := maxR * r.len
 
@@ -66,7 +66,7 @@ func (s *Sparkles) draw(dst *ebiten.Image, cx, cy float64, screenH int) {
 		x1 := float32(cx + math.Cos(r.angle)*r1)
 		y1 := float32(cy + math.Sin(r.angle)*r1)
 
-		// Quasi bianchi con leggero tint
+		// Nearly white with slight tint
 		c := hsvToRGB(r.hue, 0.25, 1.0)
 		c.A = uint8(r.life * 220)
 

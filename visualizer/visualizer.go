@@ -27,7 +27,7 @@ const (
 	agcMinLevel = 0.001
 )
 
-// shockwave è un anello che si espande verso i bordi al kick.
+// shockwave is a ring that expands toward the edges on kick.
 type shockwave struct {
 	radius float64
 	alpha  float64
@@ -47,7 +47,7 @@ type Visualizer struct {
 	rotDelta   float64
 	ringPulse  float64
 	shockwaves []shockwave
-	chromaShift float64 // pixel di sfasamento R/B, salta al kick e decade
+	chromaShift float64 // R/B offset in pixels, jumps on kick and decays
 	shakeX      float64 // screen shake X (buildup)
 	shakeY      float64 // screen shake Y (buildup)
 	showDebug   bool
@@ -59,8 +59,8 @@ type Visualizer struct {
 	plasma    *Plasma
 	sparkles  *Sparkles
 	orbs      *Orbs
-	bassEnergy        float64      // energia 60-200Hz per le orbs
-	bassHistory       [480]float64 // ~8s a 60fps
+	bassEnergy        float64      // 60-200Hz energy for the orbs
+	bassHistory       [480]float64 // ~8s at 60fps
 	mixEnergyHistory  [480]float64
 	hihatEnergyHist   [480]float64
 	historyIdx        int
@@ -104,7 +104,7 @@ func (v *Visualizer) Update() error {
 	v.rawSamples = samples
 	rawBands := dsp.Spectrum(samples, NumBands)
 
-	// AGC visuale
+	// Visual AGC
 	var currentMax float32
 	for _, m := range rawBands {
 		if m > currentMax {
@@ -120,11 +120,11 @@ func (v *Visualizer) Update() error {
 		v.agcPeak = agcMinLevel
 	}
 
-	// Beat detector sui raw (ha il suo AGC interno)
+	// Beat detector on raw data (has its own internal AGC)
 	v.beat.Update(rawBands)
 
-	// Key detector: usa il buffer lungo (16384 campioni, ~2.7Hz di risoluzione)
-	// e gira ogni 15 frame (~4 Hz) per risparmiare CPU sulla FFT lunga
+	// Key detector: uses the long buffer (16384 samples, ~2.7Hz resolution)
+	// and runs every 15 frames (~4 Hz) to save CPU on the long FFT
 	v.frameCount++
 	if v.frameCount%120 == 0 {
 		keySamples := v.capture.GetKeySamples()
@@ -161,20 +161,20 @@ func (v *Visualizer) Update() error {
 	// --- Visual state ---
 	sf := v.beat.SpeedFactor()
 
-	// Hue guidato dalla tonalità: oscilla attorno al colore della key
-	// con ampiezza inversamente proporzionale alla confidence.
-	// Alta confidence → palette coerente con la tonalità.
-	// Bassa confidence (transizione, silenzio) → colori più liberi.
+	// Hue driven by key: oscillates around the key color
+	// with amplitude inversely proportional to confidence.
+	// High confidence → palette coherent with the key.
+	// Low confidence (transition, silence) → freer colors.
 	keyHue := v.keyDet.BaseHue()
 	conf := v.keyDet.Confidence
-	oscillation := 0.08 + sf*0.18 // velocità di oscillazione scalata col BPM
+	oscillation := 0.08 + sf*0.18 // oscillation speed scaled with BPM
 	v.hue += oscillation
 
-	// Attira lo hue verso il colore della tonalità: più forte con alta confidence
+	// Pull the hue toward the key color: stronger with high confidence
 	if conf > 0.5 {
-		pull := (conf - 0.5) * 0.06 // 0..0.03 di forza di attrazione
+		pull := (conf - 0.5) * 0.06 // 0..0.03 attraction force
 		diff := keyHue - math.Mod(v.hue, 360)
-		// Prendi il percorso più corto sul cerchio
+		// Take the shortest path around the circle
 		if diff > 180 {
 			diff -= 360
 		} else if diff < -180 {
@@ -190,13 +190,13 @@ func (v *Visualizer) Update() error {
 
 	if v.beat.IsKick {
 		v.ringPulse = 0.5 + v.beat.KickStrength*0.5
-		// Aberrazione cromatica: sfasamento proporzionale alla forza del kick
+		// Chromatic aberration: offset proportional to kick strength
 		v.chromaShift = 6 + v.beat.KickStrength*18
 	}
-	// Decay scalati col BPM: a tempo più veloce, tutto si risolve più in fretta
-	// sf va da 0.6 (124 BPM) a 2.2 (155 BPM)
-	ringDecay := 0.84 - (sf-1.0)*0.04  // 0.84 → 0.79 a BPM alti
-	chromaDecay := 0.85 - (sf-1.0)*0.05 // 0.85 → 0.79 a BPM alti
+	// Decay scaled with BPM: at faster tempo, everything resolves quicker
+	// sf ranges from 0.6 (124 BPM) to 2.2 (155 BPM)
+	ringDecay := 0.84 - (sf-1.0)*0.04  // 0.84 → 0.79 at high BPM
+	chromaDecay := 0.85 - (sf-1.0)*0.05 // 0.85 → 0.79 at high BPM
 	v.ringPulse *= ringDecay
 	v.chromaShift *= chromaDecay
 
@@ -212,9 +212,9 @@ func (v *Visualizer) Update() error {
 			v.shockwaves = v.shockwaves[len(v.shockwaves)-8:]
 		}
 	}
-	// Shockwave: espansione e fade scalati col BPM
-	swSpeed := 0.018 + (sf-1.0)*0.008  // più veloce a BPM alti
-	swDecay := 0.88 - (sf-1.0)*0.04    // fade più rapido a BPM alti
+	// Shockwave: expansion and fade scaled with BPM
+	swSpeed := 0.018 + (sf-1.0)*0.008  // faster at high BPM
+	swDecay := 0.88 - (sf-1.0)*0.04    // faster fade at high BPM
 	alive := v.shockwaves[:0]
 	for i := range v.shockwaves {
 		sw := &v.shockwaves[i]
@@ -227,7 +227,7 @@ func (v *Visualizer) Update() error {
 	v.shockwaves = alive
 
 	// Update subsystems
-	// Energia basso 60-200Hz (bande 20-39) per le orbs
+	// Bass energy 60-200Hz (bands 20-39) for the orbs
 	var bassSum float32
 	for i := 20; i < 39 && i < NumBands; i++ {
 		bassSum += v.bands[i]
@@ -250,16 +250,16 @@ func (v *Visualizer) Update() error {
 	}
 	bi := v.beat.BuildupIntensity
 	if v.beat.IsHihat {
-		// Più raggi durante buildup: da 12 a 50
+		// More rays during buildup: from 12 to 50
 		rayCount := int(12 + bi*38)
 		v.sparkles.burst(rayCount, v.width, v.height, v.hue+180, v.beat.HihatStrength+bi*0.5)
 	}
-	// Screen shake: buildup + impulso al kick
+	// Screen shake: buildup + kick impulse
 	kickShake := 0.0
 	if v.beat.IsKick && v.beat.KickStrength > 0.5 {
-		kickShake = (v.beat.KickStrength - 0.5) * 2 // 0..1 solo per kick forti
+		kickShake = (v.beat.KickStrength - 0.5) * 2 // 0..1 only for strong kicks
 	}
-	totalShake := bi*55 + kickShake*15 // buildup domina, kick aggiunge un colpetto
+	totalShake := bi*55 + kickShake*15 // buildup dominates, kick adds a jolt
 	v.shakeX = (rand.Float64()*2 - 1) * totalShake
 	v.shakeY = (rand.Float64()*2 - 1) * totalShake * 0.7
 
@@ -274,7 +274,7 @@ func (v *Visualizer) Draw(screen *ebiten.Image) {
 	}
 	v.plasma.resize(v.width, v.height)
 
-	// Buildup aumenta zoom e rotazione del feedback → effetto tunnel rush
+	// Buildup increases feedback zoom and rotation → tunnel rush effect
 	feedbackEnergy := v.energy + v.beat.BuildupIntensity*0.6
 	canvas := v.feedback.advance(v.rotDelta+v.beat.BuildupIntensity*0.05, feedbackEnergy)
 
@@ -292,7 +292,7 @@ func (v *Visualizer) Draw(screen *ebiten.Image) {
 	v.drawRing(canvas, cx, cy, ringRadius)
 	v.drawShockwaves(canvas, cx, cy)
 
-	// Composite canvas su screen (SourceOver normale)
+	// Composite canvas onto screen (normal SourceOver)
 	if v.chromaShift > 0.5 {
 		v.drawChromaAberration(screen, canvas)
 	} else if math.Abs(v.shakeX) > 0.5 || math.Abs(v.shakeY) > 0.5 {
@@ -303,7 +303,7 @@ func (v *Visualizer) Draw(screen *ebiten.Image) {
 		screen.DrawImage(canvas, nil)
 	}
 
-	// Glitch strips durante buildup: fette orizzontali sfasate
+	// Glitch strips during buildup: horizontally offset slices
 	if v.beat.BuildupIntensity > 0.05 {
 		v.drawGlitch(screen, canvas, v.beat.BuildupIntensity)
 	}
@@ -316,26 +316,26 @@ func (v *Visualizer) Draw(screen *ebiten.Image) {
 	}
 }
 
-// drawChromaAberration separa i canali R e B del canvas sfasandoli
-// orizzontalmente, creando l'effetto 3D anaglifo / aberrazione cromatica.
+// drawChromaAberration separates the R and B channels of the canvas by shifting them
+// horizontally, creating a 3D anaglyph / chromatic aberration effect.
 func (v *Visualizer) drawChromaAberration(screen, canvas *ebiten.Image) {
 	shift := v.chromaShift
-	// Intensità dell'alone: proporzionale allo sfasamento, max ~0.85
+	// Glow intensity: proportional to the offset, max ~0.85
 	alpha := float32(math.Min(shift/30.0, 1.0) * 0.85)
 
-	// Layer centrale
+	// Center layer
 	opBase := &ebiten.DrawImageOptions{}
 	opBase.GeoM.Translate(v.shakeX, v.shakeY)
 	screen.DrawImage(canvas, opBase)
 
-	// Alone rosso a destra (additive: si somma a quello che c'è)
+	// Red glow to the right (additive: adds to what's already there)
 	opR := &ebiten.DrawImageOptions{}
 	opR.GeoM.Translate(shift+v.shakeX, v.shakeY)
 	opR.ColorScale.Scale(1, 0, 0, alpha)
 	opR.Blend = ebiten.BlendLighter
 	screen.DrawImage(canvas, opR)
 
-	// Alone blu a sinistra
+	// Blue glow to the left
 	opB := &ebiten.DrawImageOptions{}
 	opB.GeoM.Translate(-shift+v.shakeX, v.shakeY)
 	opB.ColorScale.Scale(0, 0, 1, alpha)
@@ -403,8 +403,8 @@ func (v *Visualizer) drawShockwaves(dst *ebiten.Image, cx, cy float64) {
 	}
 }
 
-// drawGlitch disegna fette orizzontali del canvas sfasate lateralmente.
-// L'effetto cresce col buildup: da piccoli shift a grossi strappi.
+// drawGlitch draws horizontal slices of the canvas shifted sideways.
+// The effect grows with buildup: from small shifts to large tears.
 func (v *Visualizer) drawGlitch(screen, canvas *ebiten.Image, intensity float64) {
 	n := int(intensity*18) + 2
 	maxOffset := intensity * 100
@@ -425,7 +425,7 @@ func (v *Visualizer) drawGlitch(screen, canvas *ebiten.Image, intensity float64)
 	}
 }
 
-// drawEnergyGraph disegna il grafico di un segnale storico.
+// drawEnergyGraph draws the graph of a historical signal.
 func (v *Visualizer) drawEnergyGraph(screen *ebiten.Image, label string, history []float64, writeIdx, x, y int, col color.RGBA) {
 	const (
 		graphW = 350.0
@@ -501,7 +501,7 @@ func (v *Visualizer) drawDebug(screen *ebiten.Image) {
 
 	ebitenutil.DebugPrintAt(screen, info, 10, 10)
 
-	// Grafici timeline kick, hi-hat e bassline (ultimi 8 secondi)
+	// Timeline graphs for kick, hi-hat and bassline (last 8 seconds)
 	graphY := 220
 	v.drawTimeline(screen, "KICK", v.beat.KickTimes(), 10, graphY,
 		color.RGBA{255, 80, 60, 255})
@@ -515,21 +515,21 @@ func (v *Visualizer) drawDebug(screen *ebiten.Image) {
 		color.RGBA{60, 200, 255, 160})
 }
 
-// drawTimeline disegna un grafico a barre dei detection timestamp su una finestra di 8 secondi.
+// drawTimeline draws a bar chart of detection timestamps over an 8-second window.
 func (v *Visualizer) drawTimeline(screen *ebiten.Image, label string, times []time.Time, x, y int, col color.RGBA) {
 	const (
 		graphW  = 350.0
 		graphH  = 30.0
-		windowS = 8.0 // secondi di storia
+		windowS = 8.0 // seconds of history
 	)
 
 	fx := float32(x)
 	fy := float32(y)
 
-	// Sfondo
+	// Background
 	vector.DrawFilledRect(screen, fx, fy, graphW, graphH,
 		color.RGBA{0, 0, 0, 140}, false)
-	// Bordo
+	// Border
 	vector.StrokeRect(screen, fx, fy, graphW, graphH, 1,
 		color.RGBA{80, 80, 80, 200}, false)
 
@@ -542,9 +542,9 @@ func (v *Visualizer) drawTimeline(screen *ebiten.Image, label string, times []ti
 		if age > windowS {
 			continue
 		}
-		// x: 0 = windowS secondi fa (sinistra), graphW = adesso (destra)
+		// x: 0 = windowS seconds ago (left), graphW = now (right)
 		barX := fx + float32((1.0-age/windowS)*graphW)
-		// Barre più recenti sono più alte e opache
+		// More recent bars are taller and more opaque
 		freshness := float32(1.0 - age/windowS)
 		barH := graphH * (0.3 + freshness*0.7)
 		barY := fy + graphH - barH

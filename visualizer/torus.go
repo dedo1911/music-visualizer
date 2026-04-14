@@ -20,11 +20,11 @@ func (t *Torus) update(speedFactor float64, isKick bool, kickStrength, buildupIn
 	if isKick {
 		t.distort += kickStrength * 0.18
 	}
-	// Buildup aggiunge distorsione continua crescente
+	// Buildup adds continuous increasing distortion
 	t.distort += buildupIntensity * 0.02
 	t.distort *= 0.86
 
-	// Buildup accelera la rotazione
+	// Buildup accelerates the rotation
 	sf := speedFactor * (1 + buildupIntensity*0.8)
 	t.rotY += 0.55 * sf
 	t.rotX += 0.20 * sf

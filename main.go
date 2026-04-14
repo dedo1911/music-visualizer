@@ -25,23 +25,18 @@ func main() {
 		return
 	}
 
-	fmt.Println("Music Visualizer - avvio...")
+	fmt.Println("Music Visualizer starting...")
 	if *deviceIndex < 0 {
 		fmt.Println()
-		fmt.Println("Per catturare l'OUTPUT audio del PC (loopback), esegui:")
-		fmt.Println("  pactl list sources short")
-		fmt.Println("  # cerca la riga con .monitor, poi:")
-		fmt.Println("  pactl set-default-source <nome>.monitor")
-		fmt.Println()
-		fmt.Println("Oppure usa -device <indice> con un monitor dalla lista (-list).")
+		fmt.Println(audio.LoopbackHelp())
 		fmt.Println()
 	} else {
-		fmt.Printf("Usando device index: %d\n", *deviceIndex)
+		fmt.Printf("Using device index: %d\n", *deviceIndex)
 	}
 
 	cap, err := audio.NewCapture(*deviceIndex)
 	if err != nil {
-		log.Fatalf("audio capture: %v\n\nEsegui con -list per vedere i dispositivi disponibili.", err)
+		log.Fatalf("audio capture: %v\n\nRun with -list to see available devices.", err)
 	}
 
 	if err := cap.Start(); err != nil {

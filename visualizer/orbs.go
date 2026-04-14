@@ -9,16 +9,16 @@ import (
 )
 
 type orb struct {
-	x, y       float64 // posizione normalizzata 0..1
+	x, y       float64 // normalized position 0..1
 	baseRadius float64
-	phase      float64 // offset fase per oscillazione individuale
-	rotation   float64 // rotazione casuale in radianti
-	rotSpeed   float64 // velocità di rotazione
-	driftX     float64 // velocità drift
+	phase      float64 // phase offset for individual oscillation
+	rotation   float64 // random rotation in radians
+	rotSpeed   float64 // rotation speed
+	driftX     float64 // drift speed
 	driftY     float64
 }
 
-// Orbs sono sfere luminose che fluttuano e pulsano col basso (60-200Hz).
+// Orbs are luminous spheres that float and pulse with the bass (60-200Hz).
 type Orbs struct {
 	pool []orb
 }
@@ -26,7 +26,7 @@ type Orbs struct {
 func newOrbs(count int) *Orbs {
 	o := &Orbs{pool: make([]orb, count)}
 	for i := range o.pool {
-		// Posiziona solo ai bordi: evita il centro (0.25-0.75)
+		// Position only at edges: avoid the center (0.25-0.75)
 		x, y := randomEdgePosition()
 		o.pool[i] = orb{
 			x:          x,
@@ -42,13 +42,13 @@ func newOrbs(count int) *Orbs {
 	return o
 }
 
-// randomEdgePosition genera una posizione nelle fasce esterne dello schermo,
-// evitando il quadrato centrale (0.25-0.75 su entrambi gli assi).
+// randomEdgePosition generates a position in the outer bands of the screen,
+// avoiding the central square (0.25-0.75 on both axes).
 func randomEdgePosition() (float64, float64) {
 	for {
 		x := 0.03 + rand.Float64()*0.94
 		y := 0.03 + rand.Float64()*0.94
-		// Accetta solo se almeno un asse è nella fascia esterna
+		// Accept only if at least one axis is in the outer band
 		if x < 0.22 || x > 0.78 || y < 0.22 || y > 0.78 {
 			return x, y
 		}
@@ -58,10 +58,10 @@ func randomEdgePosition() (float64, float64) {
 func (o *Orbs) kick(strength float64) {
 	for i := range o.pool {
 		ob := &o.pool[i]
-		// Nuova direzione e velocità casuale, proporzionale alla forza del kick
+		// New random direction and speed, proportional to kick strength
 		ob.driftX = (rand.Float64()*2 - 1) * 0.0003 * (0.5 + strength)
 		ob.driftY = (rand.Float64()*2 - 1) * 0.0003 * (0.5 + strength)
-		// Scossa alla rotazione
+		// Jolt to rotation
 		ob.rotSpeed = (rand.Float64()*2 - 1) * 0.012 * (0.5 + strength)
 	}
 }
@@ -72,14 +72,14 @@ func (o *Orbs) update(t float64) {
 		ob.rotation += ob.rotSpeed
 		ob.x += ob.driftX
 		ob.y += ob.driftY
-		// Rimbalza ai bordi e respingi dal centro
+		// Bounce off edges and repel from center
 		if ob.x < 0.02 || ob.x > 0.98 {
 			ob.driftX = -ob.driftX
 		}
 		if ob.y < 0.02 || ob.y > 0.98 {
 			ob.driftY = -ob.driftY
 		}
-		// Se deriva verso il centro, spingi fuori
+		// If drifting toward the center, push outward
 		if ob.x > 0.22 && ob.x < 0.78 && ob.y > 0.22 && ob.y < 0.78 {
 			if ob.x < 0.5 {
 				ob.driftX -= 0.00005
@@ -96,7 +96,7 @@ func (o *Orbs) update(t float64) {
 }
 
 func (o *Orbs) draw(dst *ebiten.Image, w, h int, bassEnergy, hue float64, samples []float32) {
-	const steps = 48 // punti per disegnare il contorno
+	const steps = 48 // points to draw the outline
 
 	for _, ob := range o.pool {
 		pulse := bassEnergy * 1.0
@@ -114,7 +114,7 @@ func (o *Orbs) draw(dst *ebiten.Image, w, h int, bassEnergy, hue float64, sample
 			brightness = 1
 		}
 
-		// Glow sfumato: cerchi concentrici con alpha decrescente
+		// Gradient glow: concentric circles with decreasing alpha
 		glowLayers := 3
 		maxGlowR := radius * 3.0
 		for l := glowLayers; l >= 1; l-- {
@@ -125,8 +125,8 @@ func (o *Orbs) draw(dst *ebiten.Image, w, h int, bassEnergy, hue float64, sample
 			vector.DrawFilledCircle(dst, float32(cx), float32(cy), r, gc, false)
 		}
 
-		// Bordo distorto dalla waveform: il raggio ad ogni angolo
-		// è modulato dal campione audio corrispondente
+		// Waveform-distorted edge: the radius at each angle
+		// is modulated by the corresponding audio sample
 		c := hsvToRGB(orbHue, 0.35, brightness*0.9)
 		c.A = uint8(30 + bassEnergy*120)
 		lineW := float32(1.0 + bassEnergy*1.5)
@@ -140,17 +140,17 @@ func (o *Orbs) draw(dst *ebiten.Image, w, h int, bassEnergy, hue float64, sample
 		var firstX, firstY float32
 
 		for i := 0; i <= steps; i++ {
-			// Angolo con rotazione individuale
+			// Angle with individual rotation
 			angle := ob.rotation + float64(i)/float64(steps)*2*math.Pi
 
-			// Sample della waveform mappato su questo punto del cerchio
+			// Waveform sample mapped to this point on the circle
 			sIdx := int(float64(i) / float64(steps) * float64(sLen))
 			if sIdx >= sLen {
 				sIdx = sLen - 1
 			}
 			waveform := float64(samples[sIdx])
 
-			// Il raggio oscilla con la waveform
+			// The radius oscillates with the waveform
 			r := radius + waveform*radius*1.8
 			if r < 1 {
 				r = 1
@@ -166,7 +166,7 @@ func (o *Orbs) draw(dst *ebiten.Image, w, h int, bassEnergy, hue float64, sample
 			}
 			prevX, prevY = px, py
 		}
-		// Chiudi il cerchio
+		// Close the circle
 		vector.StrokeLine(dst, prevX, prevY, firstX, firstY, lineW, c, false)
 	}
 }

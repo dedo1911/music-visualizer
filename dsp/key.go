@@ -5,36 +5,36 @@ import (
 	"math/cmplx"
 )
 
-// Krumhansl-Schmuckler key profiles (da letteratura musicologica)
+// Krumhansl-Schmuckler key profiles (from musicological literature)
 var majorProfile = [12]float64{6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88}
 var minorProfile = [12]float64{6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17}
 
-// Camelot wheel: indice = semitoni da C (0=C, 1=C#, ..., 11=B)
+// Camelot wheel: index = semitones from C (0=C, 1=C#, ..., 11=B)
 var camelotMajor = [12]string{"8B", "3B", "10B", "5B", "12B", "7B", "2B", "9B", "4B", "11B", "6B", "1B"}
 var camelotMinor = [12]string{"5A", "12A", "7A", "2A", "9A", "4A", "11A", "6A", "1A", "8A", "3A", "10A"}
 var noteNames = [12]string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 
-// Camelot number (1-12) per ogni root note, usato per il mapping colore.
-// Il numero Camelot corrisponde alla posizione sul circolo delle quinte.
+// Camelot number (1-12) for each root note, used for color mapping.
+// The Camelot number corresponds to the position on the circle of fifths.
 var camelotNumMajor = [12]int{8, 3, 10, 5, 12, 7, 2, 9, 4, 11, 6, 1}
 var camelotNumMinor = [12]int{5, 12, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10}
 
-// KeyDetector rileva la tonalità tramite analisi cromatica e profili K-S.
-// Accumula il cromagramma su una finestra scorrevole di ~5 secondi.
+// KeyDetector detects the musical key via chromatic analysis and K-S profiles.
+// Accumulates the chromagram over a sliding window of ~5 seconds.
 type KeyDetector struct {
 	chroma [12]float64
 
-	Key        string  // es. "8B"
-	Note       string  // es. "C"
+	Key        string  // e.g. "8B"
+	Note       string  // e.g. "C"
 	IsMinor    bool
-	Confidence float64 // correlazione Pearson 0..1
-	CamelotNum int     // 1-12, posizione sul circolo delle quinte
+	Confidence float64 // Pearson correlation 0..1
+	CamelotNum int     // 1-12, position on the circle of fifths
 }
 
-// BaseHue restituisce lo hue (0-360°) associato alla tonalità corrente.
-// Camelot 1-12 → hue 0°-330°. Tonalità armonicamente compatibili
-// (adiacenti sul Camelot wheel) hanno colori simili.
-// Minor → hue base, Major → hue + 15° (leggero shift caldo).
+// BaseHue returns the hue (0-360°) associated with the current key.
+// Camelot 1-12 → hue 0°-330°. Harmonically compatible keys
+// (adjacent on the Camelot wheel) have similar colors.
+// Minor → base hue, Major → hue + 15° (slight warm shift).
 func (kd *KeyDetector) BaseHue() float64 {
 	h := float64(kd.CamelotNum-1) * 30.0 // 1→0°, 2→30°, ..., 12→330°
 	if !kd.IsMinor {
@@ -47,7 +47,7 @@ func NewKeyDetector() *KeyDetector {
 	return &KeyDetector{Key: "?", Note: "?"}
 }
 
-// Update aggiorna il cromagramma con i campioni correnti e ricalcola la tonalità.
+// Update refreshes the chromagram with current samples and recomputes the key.
 func (kd *KeyDetector) Update(samples []float32) {
 	n := len(samples)
 	if n == 0 {
@@ -64,9 +64,9 @@ func (kd *KeyDetector) Update(samples []float32) {
 
 	freqRes := float64(SampleRate) / float64(n)
 
-	// Costruisci il cromagramma direttamente dal buffer lungo.
-	// Il buffer da ~6s integra già abbastanza contesto tonale,
-	// non serve accumulare con decay.
+	// Build the chromagram directly from the long buffer.
+	// The ~6s buffer already integrates enough tonal context,
+	// no need to accumulate with decay.
 	for i := range kd.chroma {
 		kd.chroma[i] = 0
 	}
@@ -85,7 +85,7 @@ func (kd *KeyDetector) Update(samples []float32) {
 }
 
 func (kd *KeyDetector) detect() {
-	// Normalizza il cromagramma
+	// Normalize the chromagram
 	var sum float64
 	for _, v := range kd.chroma {
 		sum += v
@@ -98,7 +98,7 @@ func (kd *KeyDetector) detect() {
 		norm[i] = v / sum
 	}
 
-	// Correlazione di Pearson con i 24 profili (12 maggiori + 12 minori)
+	// Pearson correlation with the 24 profiles (12 major + 12 minor)
 	bestCorr := -math.MaxFloat64
 	bestRoot := 0
 	bestMinor := false
@@ -121,12 +121,12 @@ func (kd *KeyDetector) detect() {
 		kd.Key = camelotMajor[bestRoot]
 		kd.CamelotNum = camelotNumMajor[bestRoot]
 	}
-	// Confidence: mappa [-1,1] → [0,1]
+	// Confidence: map [-1,1] → [0,1]
 	kd.Confidence = (bestCorr + 1) / 2
 }
 
-// pearson calcola la correlazione di Pearson tra il cromagramma e il profilo
-// ruotato di `shift` semitoni.
+// pearson computes the Pearson correlation between the chromagram and the profile
+// rotated by `shift` semitones.
 func pearson(chroma [12]float64, profile [12]float64, shift int) float64 {
 	var mC, mP float64
 	for i := 0; i < 12; i++ {

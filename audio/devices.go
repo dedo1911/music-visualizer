@@ -21,23 +21,17 @@ func ListDevices() error {
 		return fmt.Errorf("enumerate devices: %w", err)
 	}
 
-	fmt.Println("Available capture devices (PulseAudio/PipeWire):")
+	fmt.Println("Available capture devices:")
 	for i, d := range devices {
 		fmt.Printf("  [%d] %s\n      id: %s\n", i, d.Name(), d.ID.String())
 	}
 
 	if len(devices) == 0 {
-		fmt.Println("  (nessun dispositivo trovato)")
+		fmt.Println("  (no devices found)")
 	}
 
 	fmt.Println()
-	fmt.Println("Per vedere i monitor source di PipeWire:")
-	fmt.Println("  pactl list sources short")
-	fmt.Println()
-	fmt.Println("Per usare un monitor source come default:")
-	fmt.Println("  pactl set-default-source <nome_monitor>")
-	fmt.Println()
-	fmt.Println("Oppure passalo direttamente con -device <id>")
+	fmt.Println(LoopbackHelp())
 
 	return nil
 }

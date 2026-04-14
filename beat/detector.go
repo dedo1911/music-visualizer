@@ -6,14 +6,14 @@ import (
 )
 
 const (
-	// Kick drum: ~27-60Hz → bande 5-20
+	// Kick drum: ~27-60Hz → bands 5-20
 	kickStartBand     = 5
 	kickEndBand       = 20
 	kickFluxThreshold = 0.30
-	kickSmoothAlpha   = 0.35 // bilanciamento tra reattività e selezione transienti
+	kickSmoothAlpha   = 0.35 // balance between reactivity and transient selection
 	kickAgcDecay      = 0.9995
 
-	// Hi-hat / cymbal: ~5kHz-12kHz → bande 101-120
+	// Hi-hat / cymbal: ~5kHz-12kHz → bands 101-120
 	hihatStartBand     = 101
 	hihatEndBand       = 120
 	hihatFluxThreshold = 0.30
@@ -21,11 +21,11 @@ const (
 	hihatAgcDecay      = 0.9992
 
 	minBeatGap   = 300 * time.Millisecond
-	hihatMinGap  = 60 * time.Millisecond // hi-hat può essere molto rapido
+	hihatMinGap  = 60 * time.Millisecond // hi-hat can be very fast
 	maxIntervals = 8
 )
 
-// Detector rileva kick, hi-hat e buildup tramite spectral flux onset detection.
+// Detector detects kick, hi-hat and buildup via spectral flux onset detection.
 type Detector struct {
 	lastBeat     time.Time
 	lastHihat    time.Time
@@ -34,8 +34,8 @@ type Detector struct {
 	kickSmooth   float32
 	hihatAgcPeak float32
 	hihatSmooth  float32
-	hihatTimes   []time.Time // timestamp degli ultimi hi-hat per calcolare il rate
-	kickTimes    []time.Time // timestamp degli ultimi kick per il grafico debug
+	hihatTimes   []time.Time // timestamps of recent hi-hats to compute rate
+	kickTimes    []time.Time // timestamps of recent kicks for debug graph
 
 	BPM              float64
 	IsKick           bool
@@ -44,8 +44,8 @@ type Detector struct {
 	IsHihat          bool
 	HihatStrength    float64 // 0..1
 	HihatEnergy      float64
-	HihatRate        float64 // hits/secondo (media su 2s)
-	BuildupIntensity float64 // 0..1, alto durante buildup (hi-hat roll)
+	HihatRate        float64 // hits/second (average over 2s)
+	BuildupIntensity float64 // 0..1, high during buildup (hi-hat roll)
 }
 
 func (d *Detector) Update(bands []float32) {
@@ -84,7 +84,7 @@ func (d *Detector) Update(bands []float32) {
 		}
 	}
 
-	// Pulizia kick timestamps (tieni ultimi 8 secondi)
+	// Clean up kick timestamps (keep last 8 seconds)
 	kickCutoff := now.Add(-8 * time.Second)
 	firstValidKick := 0
 	for firstValidKick < len(d.kickTimes) && d.kickTimes[firstValidKick].Before(kickCutoff) {
@@ -104,13 +104,13 @@ func (d *Detector) Update(bands []float32) {
 		d.hihatTimes = append(d.hihatTimes, now)
 	}
 
-	// Calcola hi-hat rate: quanti hit negli ultimi 2 secondi
+	// Compute hi-hat rate: how many hits in the last 2 seconds
 	const rateWindow = 2 * time.Second
 	const historyWindow = 8 * time.Second
 	rateCutoff := now.Add(-rateWindow)
 	historyCutoff := now.Add(-historyWindow)
 
-	// Conta hits nel rate window
+	// Count hits in the rate window
 	rateCount := 0
 	firstValid := 0
 	for i, t := range d.hihatTimes {
@@ -125,21 +125,21 @@ func (d *Detector) Update(bands []float32) {
 	d.HihatRate = float64(rateCount) / rateWindow.Seconds()
 
 	// Buildup detection: hi-hat rate mapping
-	// Normale: 2-4 hits/s (8ths a 120-140 BPM)
+	// Normal: 2-4 hits/s (8ths at 120-140 BPM)
 	// Buildup: 8-16+ hits/s (32nds, 64ths, roll)
-	// Le soglie scalano col BPM: a BPM più alto il rate "normale" è più alto,
-	// quindi servono più hits/s per essere considerato buildup.
-	// Base: 8th notes = BPM/60*2 hits/s (hi-hat standard su ottavi)
-	// Buildup: 32nd notes = BPM/60*8 hits/s (roll a trentaduesimi)
-	eighths := d.BPM / 60.0 * 2.0 // rate di ottavi al BPM corrente
+	// Thresholds scale with BPM: at higher BPM the "normal" rate is higher,
+	// so more hits/s are needed to be considered buildup.
+	// Base: 8th notes = BPM/60*2 hits/s (standard hi-hat on eighth notes)
+	// Buildup: 32nd notes = BPM/60*8 hits/s (thirty-second note roll)
+	eighths := d.BPM / 60.0 * 2.0 // eighth note rate at current BPM
 	if eighths < 3.0 {
-		eighths = 3.0 // fallback se BPM non ancora rilevato
+		eighths = 3.0 // fallback if BPM not yet detected
 	}
-	rateNormal := eighths * 1.8  // margine più alto sopra il groove normale
-	rateBuildup := eighths * 4.5 // richiede un roll molto denso
+	rateNormal := eighths * 1.8  // higher margin above normal groove
+	rateBuildup := eighths * 4.5 // requires a very dense roll
 
-	// Buildup basato solo sul rate percussivo: solo i transienti
-	// rapidi contano, l'energia sostenuta (voci, synth) no.
+	// Buildup based only on percussive rate: only fast transients
+	// count, sustained energy (vocals, synth) does not.
 	bi := (d.HihatRate - rateNormal) / (rateBuildup - rateNormal)
 	if bi < 0 {
 		bi = 0
@@ -147,22 +147,22 @@ func (d *Detector) Update(bands []float32) {
 	if bi > 1 {
 		bi = 1
 	}
-	// Smoothing con decay adattivo:
-	// - Sale veloce (cattura subito il roll)
-	// - Scende lento durante i piccoli gap nel roll
-	// - Scende MOLTO veloce se l'energia crolla (break/silenzio prima del drop)
+	// Smoothing with adaptive decay:
+	// - Rises fast (catches the roll immediately)
+	// - Falls slowly during small gaps in the roll
+	// - Falls VERY fast if energy drops (break/silence before the drop)
 	if bi > d.BuildupIntensity {
 		d.BuildupIntensity = d.BuildupIntensity*0.85 + bi*0.15
 	} else if d.HihatEnergy < 0.1 && d.BassEnergy < 0.1 {
-		// Silenzio/break: kill rapido
+		// Silence/break: fast kill
 		d.BuildupIntensity *= 0.92
 	} else {
-		// Gap normale nel roll: decay lento
+		// Normal gap in the roll: slow decay
 		d.BuildupIntensity = d.BuildupIntensity*0.998 + bi*0.002
 	}
 }
 
-// detectFlux esegue spectral flux onset detection su un range di bande.
+// detectFlux performs spectral flux onset detection on a range of bands.
 func (d *Detector) detectFlux(
 	bands []float32, start, end int,
 	smoothAlpha, threshold float32,
@@ -203,15 +203,15 @@ func (d *Detector) detectFlux(
 	return
 }
 
-// KickTimes restituisce i timestamp dei kick recenti.
+// KickTimes returns the timestamps of recent kicks.
 func (d *Detector) KickTimes() []time.Time { return d.kickTimes }
 
-// HihatTimes restituisce i timestamp degli hi-hat recenti.
+// HihatTimes returns the timestamps of recent hi-hats.
 func (d *Detector) HihatTimes() []time.Time { return d.hihatTimes }
 
-// SpeedFactor mappa il range DJ reale (124-155 BPM) su 0.6..2.2.
-// Sotto 124 BPM → 0.6 (minimo), sopra 155 BPM → 2.2 (massimo).
-// La differenza visiva tra 124 e 155 BPM è quindi 3.7x invece di 1.25x.
+// SpeedFactor maps the real DJ range (124-155 BPM) to 0.6..2.2.
+// Below 124 BPM → 0.6 (minimum), above 155 BPM → 2.2 (maximum).
+// The visual difference between 124 and 155 BPM is thus 3.7x instead of 1.25x.
 func (d *Detector) SpeedFactor() float64 {
 	if d.BPM <= 0 {
 		return 1.0

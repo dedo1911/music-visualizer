@@ -12,7 +12,7 @@ const (
 	SampleRate  = 44100
 	Channels    = 2
 	FFTSize     = 2048
-	KeyFFTSize  = 262144 // buffer lungo per key detection (~5.9s, risoluzione ~0.17Hz)
+	KeyFFTSize  = 262144 // long buffer for key detection (~5.9s, ~0.17Hz resolution)
 )
 
 // preferredBackends is set per-platform via build tags.
@@ -46,7 +46,7 @@ func NewCapture(deviceIndex int) (*Capture, error) {
 	deviceConfig.Capture.Format = malgo.FormatF32
 	deviceConfig.Capture.Channels = Channels
 	deviceConfig.SampleRate = SampleRate
-	deviceConfig.PeriodSizeInFrames = 256 // ~5.8ms per callback, riduce la latenza
+	deviceConfig.PeriodSizeInFrames = 256 // ~5.8ms per callback, reduces latency
 
 	if deviceIndex >= 0 {
 		devices, err := ctx.Devices(malgo.Capture)
@@ -95,14 +95,14 @@ func (c *Capture) onData(pOutputSample, pInputSample []byte, frameCount uint32) 
 
 	newLen := len(mono)
 
-	// Buffer corto per spectrum/beat
+	// Short buffer for spectrum/beat
 	if newLen >= FFTSize {
 		c.samples = mono[newLen-FFTSize:]
 	} else {
 		c.samples = append(c.samples[newLen:], mono...)
 	}
 
-	// Buffer lungo per key detection
+	// Long buffer for key detection
 	if newLen >= KeyFFTSize {
 		c.keySamples = mono[newLen-KeyFFTSize:]
 	} else {
