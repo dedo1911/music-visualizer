@@ -4,13 +4,17 @@ Real-time audio visualizer written in Go, designed as a background for DJ sets. 
 
 ![screenshot](screenshot.png)
 
+## Supported platforms
+
+| OS | Audio backend | Loopback capture |
+|----|---------------|------------------|
+| **Linux** | PulseAudio (PipeWire-compatible) | Native via monitor source |
+| **macOS** | Core Audio | Requires [BlackHole](https://existential.audio/blackhole/) |
+| **Windows** | WASAPI | Native loopback support |
+
 ## Requirements
 
-- Go 1.21+
-- Linux with PulseAudio or PipeWire
-- Development libraries: `libX11-devel`, `mesa-libGL-devel`, `pulseaudio-libs-devel`, `alsa-lib-devel`
-
-### Installing dependencies (Fedora/Bazzite)
+### Linux (Fedora/Bazzite)
 
 ```bash
 # In a Fedora distrobox:
@@ -19,15 +23,23 @@ sudo dnf install -y golang libX11-devel libXi-devel libXrandr-devel \
   alsa-lib-devel pulseaudio-libs-devel gcc
 ```
 
+### macOS
+
+```bash
+xcode-select --install
+brew install go
+```
+
+### Windows
+
+- Go 1.21+
+- [MinGW-w64](https://www.mingw-w64.org/) (for CGo compilation)
+
 ## Usage
 
 ```bash
 # List audio devices
 go run . -list
-
-# Set the monitor source to capture audio output
-pactl list sources short
-pactl set-default-source <name>.monitor
 
 # Run
 go run .
@@ -35,6 +47,18 @@ go run . -fullscreen
 go run . -device 3            # specific device by index
 go run . -width 2560 -height 1440 -fullscreen
 ```
+
+### Setting up loopback capture
+
+**Linux** (PulseAudio/PipeWire):
+```bash
+pactl list sources short
+pactl set-default-source <name>.monitor
+```
+
+**macOS**: Install [BlackHole](https://existential.audio/blackhole/), create a Multi-Output Device in Audio MIDI Setup (speakers + BlackHole), set it as system output, then select BlackHole as the capture device with `-device`.
+
+**Windows**: WASAPI loopback works automatically with the default capture device.
 
 ### Flags
 
@@ -60,12 +84,15 @@ go run . -width 2560 -height 1440 -fullscreen
 music-visualizer/
   main.go                    Entry point, flag parsing
   audio/
-    capture.go               Audio capture via PulseAudio (malgo/miniaudio)
+    capture.go               Audio capture (malgo/miniaudio)
     devices.go               Device enumeration
+    backend_linux.go         PulseAudio backend selection
+    backend_darwin.go        Core Audio backend selection
+    backend_windows.go       WASAPI backend selection
   beat/
     detector.go              Kick, hi-hat, BPM, and buildup detection
   dsp/
-    fft.go                   FFT + Hann window + logarithmic binning
+    fft.go                   FFT, Hann window, logarithmic spectrum binning
     key.go                   Key detection (Camelot wheel)
   visualizer/
     visualizer.go            Ebiten game loop, effect coordination
@@ -81,10 +108,10 @@ music-visualizer/
 ## Audio pipeline
 
 ```
-Monitor Source (PulseAudio/PipeWire)
+System Audio Output
         |
         v
-  audio.Capture (malgo, PulseAudio backend)
+  audio.Capture (malgo, platform-specific backend)
         |
         +---> Short buffer (2048 samples, ~46ms)
         |         |
@@ -216,7 +243,7 @@ Toroid wireframe with 28 rings x 18 segments, continuous rotation on 3 axes.
 
 ### Ring spectrum (visualizer.go)
 
-128 frequency bars arranged in a circle, with peak dots.
+128 frequency bars arranged in a circle, with peak dots. Angles are precomputed at startup to avoid per-frame trig calls.
 
 - **Base radius**: 25% of screen height
 - **Ring pulse**: jumps on kick (+8% height), decays with easing
@@ -317,6 +344,15 @@ Drawing order per frame:
 11. Debug overlay (F1)
 ```
 
+## Performance optimizations
+
+- **Precomputed Hann windows**: shared `HannWindow()` function with precomputed coefficients, reused across Spectrum and KeyDetector calls
+- **Precomputed band boundaries**: logarithmic band FFT bin indices computed once and cached via `spectrumCache`
+- **Precomputed trig tables**: ring cos/sin angles computed at startup (eliminates 512+ trig calls per frame)
+- **Buffer reuse**: Spectrum windowed/mags/bands buffers allocated once and reused
+- **Throttled key detection**: 262144-point FFT runs only every ~2 seconds
+- **Low-resolution plasma**: rendered at screen/14 resolution to minimize per-pixel trig cost
+
 ## AGC (Automatic Gain Control)
 
 The visualizer is completely volume-independent thanks to two separate AGCs:
@@ -365,9 +401,9 @@ The visualizer minimizes audio-to-visual latency through:
 | Audio callback period | ~5.8ms (256 frames) |
 | Band smoothing | ~1 frame (alpha 0.85) |
 | Kick detection smoothing | ~2.5 frames (alpha 0.35) |
-| PulseAudio/PipeWire pipeline | ~20-40ms (system dependent) |
+| System audio pipeline | ~20-40ms (OS dependent) |
 
-For further reduction, configure PipeWire:
+On Linux with PipeWire, further reduction is possible:
 ```bash
 # ~/.config/pipewire/pipewire.conf.d/low-latency.conf
 context.properties = {
@@ -375,6 +411,19 @@ context.properties = {
     default.clock.min-quantum = 128
 }
 ```
+
+## Building
+
+```bash
+# Native build
+go build -o music-visualizer .
+
+# Cross-platform (requires CGo cross-compilers)
+GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -o music-visualizer.exe .
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=o64-clang go build -o music-visualizer-mac .
+```
+
+Releases for all platforms are built automatically via GitHub Actions on tag push (`v*`).
 
 ## Dependencies
 
