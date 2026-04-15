@@ -22,7 +22,10 @@ var camelotNumMinor = [12]int{5, 12, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10}
 // KeyDetector detects the musical key via chromatic analysis and K-S profiles.
 // Accumulates the chromagram over a sliding window of ~5 seconds.
 type KeyDetector struct {
-	chroma [12]float64
+	chroma   [12]float64
+	window   []float64  // precomputed Hann window
+	windowed []float32  // reusable buffer
+	lastN    int        // last buffer size (to detect changes)
 
 	Key        string  // e.g. "8B"
 	Note       string  // e.g. "C"
@@ -54,13 +57,14 @@ func (kd *KeyDetector) Update(samples []float32) {
 		return
 	}
 
-	// Hann window + FFT
-	windowed := make([]float32, n)
-	for i, s := range samples {
-		w := float32(0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(n-1))))
-		windowed[i] = s * w
+	// Reuse/rebuild precomputed window if buffer size changed
+	if n != kd.lastN {
+		kd.window = PrecomputeHannWindow(n)
+		kd.windowed = make([]float32, n)
+		kd.lastN = n
 	}
-	freqs := FFT(windowed)
+	HannWindow(samples, kd.windowed, kd.window)
+	freqs := FFT(kd.windowed)
 
 	freqRes := float64(SampleRate) / float64(n)
 

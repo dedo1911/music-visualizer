@@ -67,11 +67,15 @@ type Visualizer struct {
 	rawSamples        []float32
 	keyDet    *dsp.KeyDetector
 
+	// Precomputed trig tables for ring drawing
+	ringCos [NumBands]float64
+	ringSin [NumBands]float64
+
 	width, height int
 }
 
 func New(cap *audio.Capture, width, height int) *Visualizer {
-	return &Visualizer{
+	v := &Visualizer{
 		capture:   cap,
 		beat:      &beat.Detector{},
 		bands:     make([]float32, NumBands),
@@ -86,6 +90,12 @@ func New(cap *audio.Capture, width, height int) *Visualizer {
 		keyDet:   dsp.NewKeyDetector(),
 		rotDelta: 0.06,
 	}
+	for i := 0; i < NumBands; i++ {
+		angle := 2*math.Pi*float64(i)/float64(NumBands) - math.Pi/2
+		v.ringCos[i] = math.Cos(angle)
+		v.ringSin[i] = math.Sin(angle)
+	}
+	return v
 }
 
 func (v *Visualizer) Update() error {
@@ -123,8 +133,8 @@ func (v *Visualizer) Update() error {
 	// Beat detector on raw data (has its own internal AGC)
 	v.beat.Update(rawBands)
 
-	// Key detector: uses the long buffer (16384 samples, ~2.7Hz resolution)
-	// and runs every 15 frames (~4 Hz) to save CPU on the long FFT
+	// Key detector: uses the long buffer (262144 samples, ~0.17Hz resolution)
+	// runs every 120 frames (~2s) to save CPU on the large FFT
 	v.frameCount++
 	if v.frameCount%120 == 0 {
 		keySamples := v.capture.GetKeySamples()
@@ -348,14 +358,15 @@ func (v *Visualizer) drawRing(dst *ebiten.Image, cx, cy, radius float64) {
 	barScale := 0.12 + v.ringPulse*0.06
 
 	for i := 0; i < n; i++ {
-		angle := 2*math.Pi*float64(i)/float64(n) - math.Pi/2
+		cosA := v.ringCos[i]
+		sinA := v.ringSin[i]
 		mag := float64(v.bands[i])
 		barLen := mag * float64(v.height) * barScale
 
-		x0 := cx + math.Cos(angle)*radius
-		y0 := cy + math.Sin(angle)*radius
-		x1 := cx + math.Cos(angle)*(radius+barLen)
-		y1 := cy + math.Sin(angle)*(radius+barLen)
+		x0 := cx + cosA*radius
+		y0 := cy + sinA*radius
+		x1 := cx + cosA*(radius+barLen)
+		y1 := cy + sinA*(radius+barLen)
 
 		t := float64(i) / float64(n)
 		bright := 0.7 + mag*0.3 + v.ringPulse*0.3
@@ -372,8 +383,8 @@ func (v *Visualizer) drawRing(dst *ebiten.Image, cx, cy, radius float64) {
 
 		if v.peaks[i] > 0.02 {
 			peakLen := float64(v.peaks[i]) * float64(v.height) * barScale
-			px := float32(cx + math.Cos(angle)*(radius+peakLen))
-			py := float32(cy + math.Sin(angle)*(radius+peakLen))
+			px := float32(cx + cosA*(radius+peakLen))
+			py := float32(cy + sinA*(radius+peakLen))
 			pc := hsvToRGB(v.hue+t*200, 0.6, 1.0)
 			pc.A = 200
 			vector.DrawFilledCircle(dst, px, py, float32(1.5+v.ringPulse*2), pc, false)

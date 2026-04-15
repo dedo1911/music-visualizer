@@ -26,8 +26,8 @@ type Capture struct {
 	ctx        *malgo.AllocatedContext
 }
 
-// NewCapture opens an audio capture device using PulseAudio backend.
-// deviceIndex: -1 = default source (set via pactl set-default-source)
+// NewCapture opens an audio capture device using the platform-preferred backend.
+// deviceIndex: -1 = default source
 //
 //	>=0 = index from the list returned by ListDevices()
 func NewCapture(deviceIndex int) (*Capture, error) {

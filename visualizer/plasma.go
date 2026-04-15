@@ -6,7 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// oversize: the plasma is rendered 1.4x larger than the screen
+// oversize: the plasma is rendered 2x larger than the screen
 // so the edges stay out of view even after the feedback warp rotation.
 const oversize = 2.0
 
@@ -78,9 +78,6 @@ func (p *Plasma) draw(dst *ebiten.Image, energy, hue float64) {
 			dist := math.Sqrt(dx*dx + dy*dy) // 0 at center, ~1.41 at corners
 			// Fade: full up to dist=0.6, fades to 0 at dist=1.0
 			fade := 1.0 - math.Max(0, (dist-0.6)/0.4)
-			if fade < 0 {
-				fade = 0
-			}
 
 			idx := (y*p.pw + x) * 4
 			p.pixels[idx] = c.R
