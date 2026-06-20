@@ -1,16 +1,16 @@
-name: Release
+name: Build
 
 on:
   push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -22,13 +22,13 @@ jobs:
               sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev libgl1-mesa-dev libasound2-dev libpulse-dev
           - os: macos-latest
             goos: darwin
-            goarch: amd64
-            artifact: music-visualizer-darwin-amd64
+            goarch: arm64
+            artifact: music-visualizer-darwin-arm64
             setup: ""
           - os: macos-latest
             goos: darwin
-            goarch: arm64
-            artifact: music-visualizer-darwin-arm64
+            goarch: amd64
+            artifact: music-visualizer-darwin-amd64
             setup: ""
           - os: windows-latest
             goos: windows
@@ -49,6 +49,11 @@ jobs:
         if: matrix.setup != ''
         run: ${{ matrix.setup }}
 
+      - name: Vet
+        env:
+          CGO_ENABLED: "1"
+        run: go vet ./...
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -61,18 +66,3 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/*
-          generate_release_notes: true
